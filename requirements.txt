@@ -1,0 +1,12 @@
+numpy
+pandas
+pyarrow
+pyreadstat
+scikit-learn
+shap
+joblib
+requests
+rdflib
+SPARQLWrapper
+matplotlib
+jupyter

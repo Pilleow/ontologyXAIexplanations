@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.idea/
+
+# zewnętrzne repo z metadanymi (scripts/fetch_nhanes_metadata.sh je ponownie klonuje) oraz
+# pobrane/wygenerowane dane (odtwarzalne przez src/download_nhanes.py + load_nhanes.py)
+external/
+data/raw/
+data/processed/
