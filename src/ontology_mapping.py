@@ -1,10 +1,13 @@
 """Wyszukuje mapowania ontologiczne (EFO / NCIT / FOODON) dla zmiennych NHANES
-oraz bezpośredniego rodzica (is_a) każdego zmapowanego terminu, na podstawie
-tabel ccb-hms/NHANES-metadata sklonowanych do external/NHANES-metadata.
+oraz przodków (is_a) każdego zmapowanego terminu, na podstawie tabel
+ccb-hms/NHANES-metadata sklonowanych do external/NHANES-metadata.
 
-Daje to jeden stały poziom grupowania zmiennych "jeden poziom wyżej" w terminy
-ontologiczne -- pośredni poziom abstrakcji, od którego projekt startuje, zanim
-powstanie adaptacyjna metoda wyboru poziomu kontrolowana pod kątem wierności.
+Grupowanie "jeden poziom wyżej" jest sterowane progiem na skali
+specificity_score (`target_specificity`, ta sama skala co w
+term_specificity.py: 1.0 = liść, 0.0 = korzeń), nie ustaloną liczbą hopów --
+dzięki temu interfejs (build_feature_groups) nie zmieni się, gdy
+specificity_score zostanie kiedyś wzbogacony o CHV/UMLS, wyszukiwania czy
+embeddingi (patrz plan dot. "eksperckości" terminu), zamiast samej głębokości.
 """
 
 from dataclasses import dataclass
@@ -80,44 +83,78 @@ def load_first_parent_map(curies: set[str]) -> dict[str, str]:
     return parent_of
 
 
-def climb_curies(leaf_curies: set[str], levels: int) -> dict[str, str]:
-    """Dla każdego liścia: CURIE osiągnięty po wspięciu się `levels` razy po
-    pierwszym znalezionym rodzicu (levels=0 -> zostaje na liściu, levels=1
-    -> dotychczasowe zachowanie "jeden poziom wyżej"). Jeśli ścieżka
-    zakończy się wcześniej (węzeł bez dalszego rodzica), zostaje na
-    ostatnim osiągniętym węźle."""
-    current: dict[str, str] = {curie: curie for curie in leaf_curies}
-    for _ in range(levels):
-        frontier = set(current.values())
-        parent_of = load_first_parent_map(frontier)
-        current = {leaf: parent_of.get(node, node) for leaf, node in current.items()}
-    return current
+def ancestor_chains(leaf_curies: set[str]) -> dict[str, list[str]]:
+    """Dla każdego liścia: pełny, zdeterminowany łańcuch (pierwszy znaleziony
+    rodzic na każdym kroku -- ten sam mechanizm co dotychczasowy kod) od
+    liścia (chain[0]) do korzenia (chain[-1], węzła bez dalszego rodzica),
+    włącznie z obydwoma końcami."""
+    chains: dict[str, list[str]] = {c: [c] for c in leaf_curies}
+    current: dict[str, str] = {c: c for c in leaf_curies}
+    active = set(leaf_curies)
+    while active:
+        parent_of = load_first_parent_map({current[c] for c in active})
+        still_active = set()
+        for c in active:
+            parent = parent_of.get(current[c])
+            if parent is not None:
+                chains[c].append(parent)
+                current[c] = parent
+                still_active.add(c)
+        active = still_active
+    return chains
+
+
+def specificity_along_chain(chain: list[str]) -> list[float]:
+    """specificity_score dla każdej pozycji w `chain` (ta sama formuła co w
+    term_specificity.specificity_scores, tylko ograniczona do tego jednego
+    zdeterminowanego łańcucha): chain[0] (liść) -> 1.0, chain[-1] (korzeń
+    osiągalny z tego liścia) -> 0.0."""
+    max_dist = len(chain) - 1
+    if max_dist == 0:
+        return [1.0]
+    return [1.0 - i / max_dist for i in range(len(chain))]
+
+
+def climb_to_specificity(leaf_curies: set[str], target_specificity: float) -> dict[str, str]:
+    """Dla każdego liścia: CURIE osiągnięty po wspinaczce po jego
+    zdeterminowanym łańcuchu "pierwszego rodzica" aż specificity_score
+    spadnie do/poniżej `target_specificity` (1.0 -> zostaje na liściu,
+    0.0 -> idzie do korzenia)."""
+    chains = ancestor_chains(leaf_curies)
+    reached: dict[str, str] = {}
+    for leaf, chain in chains.items():
+        scores = specificity_along_chain(chain)
+        reached[leaf] = next(
+            (curie for curie, score in zip(chain, scores) if score <= target_specificity),
+            chain[-1],
+        )
+    return reached
 
 
 def load_parent_labels(curies: list[str]) -> dict[str, str]:
-    """Dla każdego CURIE terminu ontologicznego: etykieta jednego z jego
-    bezpośrednich rodziców (is_a) (pierwszego znalezionego), używana jako
-    klucz grupowania jeden poziom wyżej. Szczególny przypadek climb_curies
-    z levels=1."""
-    reached = climb_curies(set(curies), levels=1)
+    """Dla każdego CURIE terminu ontologicznego: etykieta jego bezpośredniego
+    rodzica (is_a, pierwszego znalezionego), używana jako klucz grupowania
+    jeden poziom wyżej."""
+    chains = ancestor_chains(set(curies))
+    reached = {c: chain[1] for c, chain in chains.items() if len(chain) > 1}
     label_of = load_labels(set(reached.values()))
-    return {
-        child: label_of[parent]
-        for child, parent in reached.items()
-        if parent != child and parent in label_of
-    }
+    return {child: label_of[parent] for child, parent in reached.items() if parent in label_of}
 
 
 def build_feature_groups(
-    feature_vars: list[str], tables: list[str], levels: int = 1
+    feature_vars: list[str], tables: list[str], target_specificity: float = 1.0
 ) -> dict[str, str]:
     """zmienna -> etykieta grupy używana do agregacji wartości SHAP: etykieta
-    przodka terminu `levels` poziomów wyżej w ontologii (levels=0: etykieta
-    samego terminu, bez grupowania), jeśli jest dostępna, w przeciwnym razie
-    własna etykieta terminu, a jeśli nie ma mapowania -- sama nazwa zmiennej."""
+    pierwszego przodka na ścieżce do korzenia, którego specificity_score
+    spadł do/poniżej target_specificity (target_specificity=1.0: etykieta
+    samego terminu/liścia, bez grupowania; 0.0: korzeń); jeśli osiągnięty
+    węzeł nie ma własnej etykiety w ontology_labels.tsv (np. owl:Thing,
+    IAO:0000030), użyty jest jego CURIE -- NIE etykieta liścia, żeby nie
+    zamaskować tego, że wspinaczka faktycznie dotarła gdzie indziej; a jeśli
+    nie ma mapowania -- sama nazwa zmiennej."""
     mappings = load_variable_mappings(tables)
     curies = {m.term_curie for v, m in mappings.items() if v in feature_vars}
-    reached = climb_curies(curies, levels=levels)
+    reached = climb_to_specificity(curies, target_specificity)
     label_of = load_labels(set(reached.values()))
 
     groups: dict[str, str] = {}
@@ -127,7 +164,7 @@ def build_feature_groups(
             groups[var] = var
         else:
             reached_curie = reached.get(mapping.term_curie, mapping.term_curie)
-            groups[var] = label_of.get(reached_curie, mapping.term_label)
+            groups[var] = label_of.get(reached_curie, reached_curie)
     return groups
 
 

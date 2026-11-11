@@ -2,13 +2,16 @@
 a następnie agreguje je do wyjaśnień wysokopoziomowych opartych na ontologii,
 używając mapowania zmienna -> grupa ontologiczna z ontology_mapping.py.
 
-Poziom abstrakcji jest na razie ustalany ręcznie, jedną liczbą wspólną dla
-wszystkich cech (parametr `--levels`): każda zmapowana cecha jest podciągana
-tyle samo poziomów wyżej w ontologii, a jej wkład SHAP jest sumowany w tej
-grupie. Adaptacyjny, zróżnicowany wybór poziomu per cecha -- np. na
-podstawie `specificity_score` z term_specificity.py -- i pomiar wynikającej
-z tego utraty wierności/informacji to wciąż otwarty problem metodologiczny,
-który projekt musi rozwiązać.
+Poziom abstrakcji jest na razie ustalany ręcznie, jednym progiem wspólnym dla
+wszystkich cech (parametr `--target-specificity`, skala specificity_score z
+term_specificity.py: 1.0 = liść/bez grupowania, 0.0 = korzeń): każda
+zmapowana cecha jest podciągana po swojej ścieżce do korzenia, aż jej
+specificity_score spadnie do/poniżej tego progu, a jej wkład SHAP jest
+sumowany w tak wybranej grupie. Adaptacyjny, zróżnicowany próg per cecha --
+np. gdy specificity_score zostanie wzbogacony o CHV/UMLS lub wyszukiwania,
+nie tylko głębokość -- i pomiar wynikającej z tego utraty wierności/
+informacji to wciąż otwarty problem metodologiczny, który projekt musi
+rozwiązać.
 """
 
 from pathlib import Path
@@ -28,7 +31,7 @@ def grouped_shap(shap_row: pd.Series, groups: dict[str, str]) -> pd.Series:
     return labelled.groupby(level=0).sum().sort_values(key=abs, ascending=False)
 
 
-def main(n_examples: int = 3, levels: int = 1) -> None:
+def main(n_examples: int = 3, target_specificity: float = 1.0) -> None:
     model = joblib.load(PROCESSED_DIR / "diabetes_model.joblib")
     X_test = pd.read_parquet(PROCESSED_DIR / "X_test.parquet")
     y_test = pd.read_parquet(PROCESSED_DIR / "y_test.parquet")["label"]
@@ -37,7 +40,9 @@ def main(n_examples: int = 3, levels: int = 1) -> None:
     shap_values = explainer(X_test)
     shap_df = pd.DataFrame(shap_values.values, columns=FEATURE_VARS, index=X_test.index)
 
-    groups = build_feature_groups(FEATURE_VARS, FEATURE_TABLES, levels=levels)
+    groups = build_feature_groups(
+        FEATURE_VARS, FEATURE_TABLES, target_specificity=target_specificity
+    )
     print("Feature -> ontology group used for aggregation:")
     for var, group in groups.items():
         print(f"  {var:10s} -> {group}")
@@ -68,17 +73,17 @@ if __name__ == "__main__":
         description="Wyjaśnienia SHAP na poziomie cech i pogrupowane ontologicznie."
     )
     parser.add_argument(
-        "--levels",
-        type=int,
-        default=1,
+        "--target-specificity",
+        type=float,
+        default=1.0,
         help=(
-            "O ile poziomów ontologii wspiąć się od zmapowanego terminu przed "
-            "zsumowaniem SHAP (0 = poziom cech/liścia, 1 = bezpośredni rodzic "
-            "[domyślnie], 2 = dziadek, ...)."
+            "Próg na skali specificity_score (1.0 = liść/bez grupowania "
+            "[domyślnie], 0.0 = korzeń), do którego wspinamy się po ontologii "
+            "przed zsumowaniem SHAP."
         ),
     )
     parser.add_argument(
         "--n-examples", type=int, default=3, help="Liczba przykładowych respondentów."
     )
     args = parser.parse_args()
-    main(n_examples=args.n_examples, levels=args.levels)
+    main(n_examples=args.n_examples, target_specificity=args.target_specificity)
