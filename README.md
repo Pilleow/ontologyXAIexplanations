@@ -34,6 +34,7 @@ python src/explain.py       # wyjaśnienia SHAP, poziom cech i poziom ontologicz
 - `src/load_nhanes.py`, `src/download_nhanes.py` -- pobieranie i scalanie tabel NHANES
 - `src/features.py` -- definicje cech/etykiety
 - `src/ontology_mapping.py` -- mapowanie zmienna -> termin ontologiczny -> termin nadrzędny
+- `src/term_specificity.py` -- `specificity_score` węzłów ontologii (0=korzeń, 1=liść), fundament do mierzenia "eksperckości" terminu
 - `src/train_model.py` -- bazowy `HistGradientBoostingClassifier`
 - `src/explain.py` -- wyjaśnienia SHAP, na poziomie cech i pogrupowane ontologicznie
 - `external/NHANES-metadata` -- sklonowane tabele mapowań/ontologii (zignorowane w git, patrz `scripts/fetch_nhanes_metadata.sh`)

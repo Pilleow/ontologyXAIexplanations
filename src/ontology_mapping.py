@@ -52,6 +52,19 @@ def load_variable_mappings(tables: list[str]) -> dict[str, OntologyMapping]:
     return mappings
 
 
+def load_labels(curies: set[str]) -> dict[str, str]:
+    """Etykieta (label) dla podanego zbioru CURIE, z ontology_labels.tsv."""
+    label_of: dict[str, str] = {}
+    with open(ONTOLOGY_LABELS, encoding="utf-8") as fh:
+        next(fh)  # nagłówek
+        for line in fh:
+            parts = line.rstrip("\n").split("\t")
+            subject, label = parts[0], parts[1]
+            if subject in curies:
+                label_of[subject] = label
+    return label_of
+
+
 def load_parent_labels(curies: list[str]) -> dict[str, str]:
     """Dla każdego CURIE terminu ontologicznego: etykieta jednego z jego
     bezpośrednich rodziców (is_a) (pierwszego znalezionego), używana jako
@@ -69,15 +82,7 @@ def load_parent_labels(curies: list[str]) -> dict[str, str]:
     for subject, obj in edge_rows:
         parent_of.setdefault(subject, obj)  # zachowaj tylko pierwszego rodzica
 
-    parent_curies = set(parent_of.values())
-    label_of: dict[str, str] = {}
-    with open(ONTOLOGY_LABELS, encoding="utf-8") as fh:
-        next(fh)  # nagłówek
-        for line in fh:
-            parts = line.rstrip("\n").split("\t")
-            subject, label = parts[0], parts[1]
-            if subject in parent_curies:
-                label_of[subject] = label
+    label_of = load_labels(set(parent_of.values()))
 
     return {
         child: label_of[parent]
