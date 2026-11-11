@@ -65,39 +65,60 @@ def load_labels(curies: set[str]) -> dict[str, str]:
     return label_of
 
 
-def load_parent_labels(curies: list[str]) -> dict[str, str]:
-    """Dla każdego CURIE terminu ontologicznego: etykieta jednego z jego
-    bezpośrednich rodziców (is_a) (pierwszego znalezionego), używana jako
-    klucz grupowania jeden poziom wyżej."""
-    curie_set = set(curies)
-    edge_rows = []
+def load_first_parent_map(curies: set[str]) -> dict[str, str]:
+    """Dla podanego zbioru CURIE (jedna "warstwa" wspinaczki): jeden,
+    pierwszy znaleziony w pliku bezpośredni rodzic (is_a) każdego z nich.
+    Wybór "pierwszego" jest zdeterminowany kolejnością wierszy w
+    ontology_edges.tsv (ten sam mechanizm, co dotychczasowy kod)."""
+    parent_of: dict[str, str] = {}
     with open(ONTOLOGY_EDGES, encoding="utf-8") as fh:
         next(fh)  # nagłówek
         for line in fh:
             subject, obj, _ontology = line.rstrip("\n").split("\t")
-            if subject in curie_set:
-                edge_rows.append((subject, obj))
+            if subject in curies and subject not in parent_of:
+                parent_of[subject] = obj
+    return parent_of
 
-    parent_of: dict[str, str] = {}
-    for subject, obj in edge_rows:
-        parent_of.setdefault(subject, obj)  # zachowaj tylko pierwszego rodzica
 
-    label_of = load_labels(set(parent_of.values()))
+def climb_curies(leaf_curies: set[str], levels: int) -> dict[str, str]:
+    """Dla każdego liścia: CURIE osiągnięty po wspięciu się `levels` razy po
+    pierwszym znalezionym rodzicu (levels=0 -> zostaje na liściu, levels=1
+    -> dotychczasowe zachowanie "jeden poziom wyżej"). Jeśli ścieżka
+    zakończy się wcześniej (węzeł bez dalszego rodzica), zostaje na
+    ostatnim osiągniętym węźle."""
+    current: dict[str, str] = {curie: curie for curie in leaf_curies}
+    for _ in range(levels):
+        frontier = set(current.values())
+        parent_of = load_first_parent_map(frontier)
+        current = {leaf: parent_of.get(node, node) for leaf, node in current.items()}
+    return current
 
+
+def load_parent_labels(curies: list[str]) -> dict[str, str]:
+    """Dla każdego CURIE terminu ontologicznego: etykieta jednego z jego
+    bezpośrednich rodziców (is_a) (pierwszego znalezionego), używana jako
+    klucz grupowania jeden poziom wyżej. Szczególny przypadek climb_curies
+    z levels=1."""
+    reached = climb_curies(set(curies), levels=1)
+    label_of = load_labels(set(reached.values()))
     return {
         child: label_of[parent]
-        for child, parent in parent_of.items()
-        if parent in label_of
+        for child, parent in reached.items()
+        if parent != child and parent in label_of
     }
 
 
-def build_feature_groups(feature_vars: list[str], tables: list[str]) -> dict[str, str]:
+def build_feature_groups(
+    feature_vars: list[str], tables: list[str], levels: int = 1
+) -> dict[str, str]:
     """zmienna -> etykieta grupy używana do agregacji wartości SHAP: etykieta
-    bezpośredniego rodzica terminu, jeśli jest dostępna, w przeciwnym razie
+    przodka terminu `levels` poziomów wyżej w ontologii (levels=0: etykieta
+    samego terminu, bez grupowania), jeśli jest dostępna, w przeciwnym razie
     własna etykieta terminu, a jeśli nie ma mapowania -- sama nazwa zmiennej."""
     mappings = load_variable_mappings(tables)
-    curies = [m.term_curie for v, m in mappings.items() if v in feature_vars]
-    parent_labels = load_parent_labels(curies)
+    curies = {m.term_curie for v, m in mappings.items() if v in feature_vars}
+    reached = climb_curies(curies, levels=levels)
+    label_of = load_labels(set(reached.values()))
 
     groups: dict[str, str] = {}
     for var in feature_vars:
@@ -105,7 +126,8 @@ def build_feature_groups(feature_vars: list[str], tables: list[str]) -> dict[str
         if mapping is None:
             groups[var] = var
         else:
-            groups[var] = parent_labels.get(mapping.term_curie, mapping.term_label)
+            reached_curie = reached.get(mapping.term_curie, mapping.term_curie)
+            groups[var] = label_of.get(reached_curie, mapping.term_label)
     return groups
 
 

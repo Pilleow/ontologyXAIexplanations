@@ -2,11 +2,12 @@
 a następnie agreguje je do wyjaśnień wysokopoziomowych opartych na ontologii,
 używając mapowania zmienna -> grupa ontologiczna z ontology_mapping.py.
 
-To pierwsza wersja metody wyjaśniania o ustalonym, stałym poziomie
-abstrakcji: każda zmapowana cecha jest podciągana dokładnie jeden poziom
-wyżej (do bezpośredniego rodzica w ontologii), a jej wkład SHAP jest sumowany
-w tej grupie. Adaptacyjny wybór poziomu abstrakcji i pomiar wynikającej z
-tego utraty wierności/informacji to wciąż otwarty problem metodologiczny,
+Poziom abstrakcji jest na razie ustalany ręcznie, jedną liczbą wspólną dla
+wszystkich cech (parametr `--levels`): każda zmapowana cecha jest podciągana
+tyle samo poziomów wyżej w ontologii, a jej wkład SHAP jest sumowany w tej
+grupie. Adaptacyjny, zróżnicowany wybór poziomu per cecha -- np. na
+podstawie `specificity_score` z term_specificity.py -- i pomiar wynikającej
+z tego utraty wierności/informacji to wciąż otwarty problem metodologiczny,
 który projekt musi rozwiązać.
 """
 
@@ -27,7 +28,7 @@ def grouped_shap(shap_row: pd.Series, groups: dict[str, str]) -> pd.Series:
     return labelled.groupby(level=0).sum().sort_values(key=abs, ascending=False)
 
 
-def main(n_examples: int = 3) -> None:
+def main(n_examples: int = 3, levels: int = 1) -> None:
     model = joblib.load(PROCESSED_DIR / "diabetes_model.joblib")
     X_test = pd.read_parquet(PROCESSED_DIR / "X_test.parquet")
     y_test = pd.read_parquet(PROCESSED_DIR / "y_test.parquet")["label"]
@@ -36,7 +37,7 @@ def main(n_examples: int = 3) -> None:
     shap_values = explainer(X_test)
     shap_df = pd.DataFrame(shap_values.values, columns=FEATURE_VARS, index=X_test.index)
 
-    groups = build_feature_groups(FEATURE_VARS, FEATURE_TABLES)
+    groups = build_feature_groups(FEATURE_VARS, FEATURE_TABLES, levels=levels)
     print("Feature -> ontology group used for aggregation:")
     for var, group in groups.items():
         print(f"  {var:10s} -> {group}")
@@ -61,4 +62,23 @@ def main(n_examples: int = 3) -> None:
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Wyjaśnienia SHAP na poziomie cech i pogrupowane ontologicznie."
+    )
+    parser.add_argument(
+        "--levels",
+        type=int,
+        default=1,
+        help=(
+            "O ile poziomów ontologii wspiąć się od zmapowanego terminu przed "
+            "zsumowaniem SHAP (0 = poziom cech/liścia, 1 = bezpośredni rodzic "
+            "[domyślnie], 2 = dziadek, ...)."
+        ),
+    )
+    parser.add_argument(
+        "--n-examples", type=int, default=3, help="Liczba przykładowych respondentów."
+    )
+    args = parser.parse_args()
+    main(n_examples=args.n_examples, levels=args.levels)
