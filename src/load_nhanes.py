@@ -23,6 +23,12 @@ TABLES = [
     "PAQ_J",
     "SMQ_J",
     "ALQ_J",
+    "MCQ_J",
+    "KIQ_U_J",
+    "CDQ_J",
+    "DPQ_J",
+    "BPQ_J",
+    "OSQ_J",
 ]
 
 

@@ -13,7 +13,10 @@ import pandas as pd
 
 PROCESSED_DIR = Path(__file__).resolve().parents[1] / "data" / "processed"
 
-FEATURE_TABLES = ["DEMO_J", "BMX_J", "BPX_J", "HDL_J", "TCHOL_J", "SMQ_J", "PAQ_J"]
+FEATURE_TABLES = [
+    "DEMO_J", "BMX_J", "BPX_J", "HDL_J", "TCHOL_J", "SMQ_J", "PAQ_J",
+    "MCQ_J", "KIQ_U_J", "CDQ_J", "DPQ_J", "BPQ_J", "OSQ_J",
+]
 
 FEATURE_VARS = [
     "RIAGENDR",   # płeć
@@ -32,6 +35,26 @@ FEATURE_VARS = [
     "PAQ620",     # umiarkowana aktywność w pracy
     "PAQ650",     # intensywna aktywność rekreacyjna
     "PAQ665",     # umiarkowana aktywność rekreacyjna
+    "MCQ010",     # czy kiedykolwiek zdiagnozowano astmę
+    "MCQ040",     # czy w ostatnich 12 miesiącach był atak astmy
+    "KIQ026",     # czy kiedykolwiek miał(a) kamienie nerkowe
+    "KIQ029",     # czy w ostatnich 12 miesiącach przeszedł kamień nerkowy
+    "MCQ092",     # czy kiedykolwiek miał(a) transfuzję krwi
+    "MCQ160B",    # czy kiedykolwiek zdiagnozowano niewydolność serca
+    "MCQ160C",    # czy kiedykolwiek zdiagnozowano chorobę wieńcową
+    "MCQ160D",    # czy kiedykolwiek zdiagnozowano dusznicę bolesną
+    "MCQ160G",    # czy kiedykolwiek zdiagnozowano rozedmę płuc
+    "MCQ160K",    # czy kiedykolwiek zdiagnozowano przewlekłe zapalenie oskrzeli
+    "MCQ203",     # czy kiedykolwiek miał(a) żółtaczkę
+    "CDQ001",     # czy kiedykolwiek miał(a) ból/dyskomfort w klatce piersiowej
+    "CDQ010",     # czy ma duszność przy wchodzeniu pod górę/szybkim chodzeniu
+    "DPQ010",     # PHQ-9: mało zainteresowania/przyjemności z robienia rzeczy
+    "DPQ020",     # PHQ-9: poczucie smutku/depresji/bezradności
+    "BPQ020",     # czy kiedykolwiek zdiagnozowano nadciśnienie
+    "BPQ080",     # czy kiedykolwiek zdiagnozowano wysoki cholesterol
+    "OSQ060",     # czy kiedykolwiek zdiagnozowano osteoporozę
+    "MCQ160E",    # czy kiedykolwiek miał(a) zawał serca
+    "MCQ160N",    # czy kiedykolwiek zdiagnozowano dnę moczanową
 ]
 
 LABEL_VAR = "LBXGH"
@@ -47,6 +70,26 @@ MISSING_CODES = {
     "PAQ620": [7, 9],
     "PAQ650": [7, 9],
     "PAQ665": [7, 9],
+    "MCQ010": [7, 9],
+    "MCQ040": [7, 9],
+    "KIQ026": [7, 9],
+    "KIQ029": [7, 9],
+    "MCQ092": [7, 9],
+    "MCQ160B": [7, 9],
+    "MCQ160C": [7, 9],
+    "MCQ160D": [7, 9],
+    "MCQ160G": [7, 9],
+    "MCQ160K": [7, 9],
+    "MCQ203": [7, 9],
+    "CDQ001": [7, 9],
+    "CDQ010": [7, 9],
+    "DPQ010": [7, 9],
+    "DPQ020": [7, 9],
+    "BPQ020": [7, 9],
+    "BPQ080": [7, 9],
+    "OSQ060": [7, 9],
+    "MCQ160E": [7, 9],
+    "MCQ160N": [7, 9],
 }
 
 
