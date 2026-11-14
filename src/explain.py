@@ -31,6 +31,23 @@ def grouped_shap(shap_row: pd.Series, groups: dict[str, str]) -> pd.Series:
     return labelled.groupby(level=0).sum().sort_values(key=abs, ascending=False)
 
 
+def print_explanation(
+    seqn, note: str, X_test: pd.DataFrame, proba, shap_df: pd.DataFrame, groups: dict[str, str]
+) -> None:
+    p = proba[X_test.index.get_loc(seqn)]
+    print(f"\n=== Respondent SEQN={seqn}  P(diabetes)={p:.2f}{note} ===")
+
+    print("-- Feature-level SHAP (top 6) --")
+    feat_shap = shap_df.loc[seqn].sort_values(key=abs, ascending=False)
+    for var, val in feat_shap.head(6).items():
+        print(f"  {var:10s} {val:+.3f}  (value={X_test.loc[seqn, var]})")
+
+    print("-- Ontology-grouped SHAP (top 6) --")
+    group_shap = grouped_shap(shap_df.loc[seqn], groups)
+    for group, val in group_shap.head(6).items():
+        print(f"  {group:35s} {val:+.3f}")
+
+
 def main(n_examples: int = 3, target_specificity: float = 1.0) -> None:
     model = joblib.load(PROCESSED_DIR / "diabetes_model.joblib")
     X_test = pd.read_parquet(PROCESSED_DIR / "X_test.parquet")
@@ -53,17 +70,18 @@ def main(n_examples: int = 3, target_specificity: float = 1.0) -> None:
     examples = list(candidates[:n_examples]) or list(X_test.index[:n_examples])
 
     for seqn in examples:
-        print(f"\n=== Respondent SEQN={seqn}  P(diabetes)={proba[X_test.index.get_loc(seqn)]:.2f} ===")
+        print_explanation(seqn, "", X_test, proba, shap_df, groups)
 
-        print("-- Feature-level SHAP (top 6) --")
-        feat_shap = shap_df.loc[seqn].sort_values(key=abs, ascending=False)
-        for var, val in feat_shap.head(6).items():
-            print(f"  {var:10s} {val:+.3f}  (value={X_test.loc[seqn, var]})")
-
-        print("-- Ontology-grouped SHAP (top 6) --")
-        group_shap = grouped_shap(shap_df.loc[seqn], groups)
-        for group, val in group_shap.head(6).items():
-            print(f"  {group:35s} {val:+.3f}")
+    # dodatkowo: skrajne przypadki w całym zbiorze testowym, dla kontrastu
+    # z powyższymi przykładami wysokiego ryzyka
+    highest_seqn = X_test.index[proba.argmax()]
+    lowest_seqn = X_test.index[proba.argmin()]
+    print_explanation(
+        highest_seqn, "  (najwyższe w całym zbiorze testowym)", X_test, proba, shap_df, groups
+    )
+    print_explanation(
+        lowest_seqn, "  (najniższe w całym zbiorze testowym)", X_test, proba, shap_df, groups
+    )
 
 
 if __name__ == "__main__":

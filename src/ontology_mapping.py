@@ -16,10 +16,10 @@ from pathlib import Path
 import pandas as pd
 
 from chv_familiarity import chv_familiarity, load_chv_scores
+from term_specificity import load_parent_map
 
 META_DIR = Path(__file__).resolve().parents[1] / "external" / "NHANES-metadata"
 VARIABLE_MAPPINGS = META_DIR / "ontology-mappings" / "nhanes_variables_mappings.tsv"
-ONTOLOGY_EDGES = META_DIR / "ontology-tables" / "ontology_edges.tsv"
 ONTOLOGY_LABELS = META_DIR / "ontology-tables" / "ontology_labels.tsv"
 
 
@@ -46,12 +46,13 @@ MANUAL_OVERRIDES: dict[str, tuple[str, str]] = {
     # ogólnego NCIT:C156140 "Pain or Discomfort" (wynik 0.743), gubiąc słowo
     # "chest". CDQ001 jest #4 wg globalnego |SHAP| w tym modelu.
     "CDQ001": ("NCIT:C38665", "Chest Pain"),
-    # "high cholesterol" -> najlepszy kandydat to ogólne "Cholesterol"
-    # (NCIT:C369, 0.842), ale "Cholesterol High, CTCAE" (NCIT:C143368,
-    # 0.742) lepiej odpowiada treści pytania (podwyższony, nie sam pomiar)
-    # -- wybór semantyczny, nie czysto najwyższy wynik. Oryginalnie brak
-    # mapowania w ogóle (score 0.0) dla tego cyklu.
-    "BPQ080": ("NCIT:C143368", "Cholesterol High, CTCAE"),
+    # "high cholesterol" -> "Hypercholesterolemia" (NCIT:C37967). Rodzic to
+    # "Abnormal Blood Chemistry and Hematology Test Result" -- realny,
+    # zrozumiały koncept, w przeciwieństwie do poprzedniej wersji tej
+    # poprawki ("Cholesterol High, CTCAE"), która wspinała się przez
+    # żargon protokołów badań klinicznych ("Adverse Event", "CTCAE by
+    # Body System"). Oryginalnie brak mapowania w ogóle dla tego cyklu.
+    "BPQ080": ("NCIT:C37967", "Hypercholesterolemia"),
     # "heart attack" nie ma dobrego kandydata w text2term (najlepszy:
     # "Heart" 0.673, zupełnie ogólny). Używamy więc CURIE, które upstream
     # poprawnie przypisał siostrzanej zmiennej o wieku rozpoznania tego
@@ -60,6 +61,79 @@ MANUAL_OVERRIDES: dict[str, tuple[str, str]] = {
     # "gout" -> gout/Gout (wynik 0.996, prawie idealny). Oryginalnie brak
     # mapowania w ogóle dla tej (nie wiekowej) zmiennej.
     "MCQ160N": ("EFO:0004274", "gout"),
+    # SourceTerm: "Age in years at screening" -- text2term dopasował do
+    # "Screening Study" (NCIT:C71485, wynik 0.739), gubiąc "age" na rzecz
+    # "screening". Istnieje czysty koncept "Age" (NCIT:C25150, rodzic
+    # "Personal Attribute" -- ta sama gałąź co RIAGENDR/"Gender", więc wiek
+    # i płeć będą się sensownie grupować razem wyżej). RIDAGEYR jest #1 wg
+    # globalnego |SHAP| w tym modelu, dwukrotnie przed kolejną cechą.
+    "RIDAGEYR": ("NCIT:C25150", "Age"),
+    # SourceTerm: "Vigorous recreational activities" -- text2term dopasował
+    # do niezwiązanego NCIT:C148226 "Extent Breast Cancer Treatment
+    # Disrupted Recreational Activities" (pytanie o zakłócenie aktywności
+    # przez leczenie raka piersi, nie o poziom aktywności w ogóle).
+    # "Strenuous Exercise" (NCIT:C39773) to rodzeństwo "Moderate Exercise"
+    # (NCIT:C39772, już używane przez PAQ620) w tej samej gałęzi "Exercise".
+    "PAQ650": ("NCIT:C39773", "Strenuous Exercise"),
+    # SourceTerm: "Moderate recreational activities" -- ten sam błąd co
+    # PAQ650. Mapujemy na ten sam koncept co PAQ620 ("Moderate Exercise",
+    # NCIT:C39772) -- ten sam poziom intensywności, inny kontekst pytania
+    # (rekreacja vs praca), ale to ten sam koncept ontologiczny.
+    "PAQ665": ("NCIT:C39772", "Moderate Exercise"),
+    # "race and ethnicity" -> text2term dał "American Ethnicity" (wynik
+    # 0.644), ale to okazało się BŁĘDNE: ten konkretny termin to wąska
+    # podgrupa etniczna ("osoba pochodząca z Ameryk", rodzeństwo "Han
+    # Chinese"/"Sephardic Jew" w tej samej gałęzi), nie ogólna kategoria
+    # rasy/pochodzenia, jaką jest RIDRETH3. Właściwy, generyczny koncept
+    # to "Race" (NCIT:C17049, rodzic "Demographic Group"). Oryginalnie
+    # brak mapowania w ogóle.
+    "RIDRETH3": ("NCIT:C17049", "Race"),
+    # "poverty income ratio" -> Income (wynik 0.593, CHV familiarity
+    # 0.775), rodzic "Socioeconomic Factors" -- ta sama gałąź co
+    # DMDEDUC2/"Education Level". Oryginalnie brak mapowania w ogóle.
+    "INDFMPIR": ("NCIT:C41150", "Income"),
+    # "systolic blood pressure" -> Systolic Blood Pressure (wynik 0.988,
+    # niemal idealny), rodzic "Blood Pressure". Oryginalnie brak mapowania
+    # w ogóle.
+    "BPXSY1": ("NCIT:C25298", "Systolic Blood Pressure"),
+    # "diastolic blood pressure" -> Diastolic Blood Pressure (wynik 0.983).
+    # Oryginalnie brak mapowania w ogóle.
+    "BPXDI1": ("NCIT:C25299", "Diastolic Blood Pressure"),
+    # SourceTerm: "Vigorous work activity" -- ta sama intensywność co
+    # PAQ650 (vigorous recreational), inny kontekst (praca). Mapujemy na
+    # ten sam koncept dla spójności. Oryginalnie brak mapowania w ogóle.
+    "PAQ605": ("NCIT:C39773", "Strenuous Exercise"),
+    # "cigarette smoking" -> Cigarette Smoking (wynik 0.975), rodzic
+    # "Tobacco Smoking" -- realny koncept, w przeciwieństwie do
+    # oryginalnego mapowania na etykietę pytania ("Smoking Question"),
+    # które wspinało się dalej przez "Clinical or Research Assessment
+    # Question" -- tę samą generyczną taksonomię pytań co CDQ010/DPQ*.
+    "SMQ020": ("NCIT:C18270", "Cigarette Smoking"),
+    # "shortness of breath" -> shortness of breath (EFO:0009727, wynik
+    # 0.976) -- realny symptom, zamiast wspinać się przez "Have Symptom
+    # or Condition Question" -> generyczną taksonomię pytań ankietowych.
+    "CDQ010": ("EFO:0009727", "shortness of breath"),
+    # "anhedonia" (kliniczny termin na "mało zainteresowania/przyjemności")
+    # -> Anhedonia (NCIT:C3673, wynik 0.970), rodzic "Mental and
+    # Behavioral Signs and Symptoms" -- ta sama gałąź co DPQ020, więc oba
+    # pytania PHQ-9 będą się sensownie grupować.
+    "DPQ010": ("NCIT:C3673", "Anhedonia"),
+    # "depressed mood" -> Depressed Mood (NCIT:C117199, wynik 0.978), ta
+    # sama gałąź "Mental and Behavioral Signs and Symptoms" co DPQ010.
+    "DPQ020": ("NCIT:C117199", "Depressed Mood"),
+    # SourceTerm: "Pass kidney stone in past 12 months" -- text2term nie
+    # ma dobrego kandydata dla "kidney stone" (najlepszy: "Kidney" 0.749,
+    # "Rat Kidney" 0.672 -- zupełnie nieistotne). Oryginalne mapowanie
+    # ("Renal Stone", NCIT:C26807) wspinało się przez "Material"/
+    # "Specimen"/"Biospecimen" -- traktując kamień jak próbkę
+    # laboratoryjną, nie schorzenie. Używamy tego samego konceptu
+    # choroby co KIQ026 (ten sam temat -- kamienie nerkowe).
+    "KIQ029": ("EFO:0004253", "nephrolithiasis"),
+    # "osteoporosis" -> Osteoporosis (NCIT:C3298, wynik 0.983), rodzic
+    # "Metabolic Bone Disorder" -- realny koncept, zamiast poprzedniej
+    # wersji tej poprawki ("Osteoporosis, CTCAE 3.0"), która wspinała się
+    # przez żargon protokołów badań klinicznych ("Adverse Event").
+    "OSQ060": ("NCIT:C3298", "Osteoporosis"),
 }
 
 
@@ -112,39 +186,91 @@ def load_labels(curies: set[str]) -> dict[str, str]:
     return label_of
 
 
-def load_first_parent_map(curies: set[str]) -> dict[str, str]:
-    """Dla podanego zbioru CURIE (jedna "warstwa" wspinaczki): jeden,
-    pierwszy znaleziony w pliku bezpośredni rodzic (is_a) każdego z nich.
-    Wybór "pierwszego" jest zdeterminowany kolejnością wierszy w
-    ontology_edges.tsv (ten sam mechanizm, co dotychczasowy kod)."""
-    parent_of: dict[str, str] = {}
-    with open(ONTOLOGY_EDGES, encoding="utf-8") as fh:
-        next(fh)  # nagłówek
-        for line in fh:
-            subject, obj, _ontology = line.rstrip("\n").split("\t")
-            if subject in curies and subject not in parent_of:
-                parent_of[subject] = obj
-    return parent_of
+def ancestor_chains(
+    leaf_curies: set[str], chv_scores: dict[str, float] | None = None
+) -> dict[str, list[str]]:
+    """Dla każdego liścia: zdeterminowany łańcuch od liścia (chain[0]) do
+    korzenia (chain[-1], węzła bez dalszego rodzica). Gdy węzeł ma kilku
+    rodziców (polihierarchia EFO/NCIT), wybierany jest ten, którego gałąź
+    dociera do NAJBLIŻSZEJ kotwicy CHV -- NIE "pierwszy znaleziony w
+    pliku" jak poprzednio. To miało znaczenie w praktyce: dla zawału serca
+    (Myocardial Infarction) "pierwszy znaleziony" prowadził przez
+    "Muscle Disorder"/"Musculoskeletal Disorder" (mięsień sercowy
+    potraktowany jak zwykła tkanka mięśniowa), mimo że w tych samych danych
+    istniała właściwa gałąź "Heart Disorder"/"Cardiovascular Disorder".
 
+    Dla każdego węzła liczymy nearest_anchor = (liczba kroków do najbliższej
+    kotwicy CHV, -familiarity w tej kotwicy): 0 kroków, jeśli własna
+    etykieta trafia w CHV, inaczej 1 + minimum (po liczbie kroków) spośród
+    rodziców. Przy wspinaczce, na każdej rozgałęzieniu wybieramy rodzica o
+    NAJMNIEJSZEJ liczbie kroków do kotwicy (remisy: wyższa familiarity,
+    potem alfabetycznie po CURIE). Dlaczego najbliższa, nie najwyższa
+    gdziekolwiek: prawie każda gałąź i tak ostatecznie trafia w ten sam,
+    bardzo ogólny węzeł blisko korzenia (np. "Disease, Disorder or
+    Finding", familiarity≈1.0 -- to po prostu słowo "choroba"), więc
+    branie maksimum "gdziekolwiek" nie rozróżniało gałęzi wcale."""
+    if chv_scores is None:
+        chv_scores = load_chv_scores()
+    full_parent_map = load_parent_map()
 
-def ancestor_chains(leaf_curies: set[str]) -> dict[str, list[str]]:
-    """Dla każdego liścia: pełny, zdeterminowany łańcuch (pierwszy znaleziony
-    rodzic na każdym kroku -- ten sam mechanizm co dotychczasowy kod) od
-    liścia (chain[0]) do korzenia (chain[-1], węzła bez dalszego rodzica),
-    włącznie z obydwoma końcami."""
-    chains: dict[str, list[str]] = {c: [c] for c in leaf_curies}
-    current: dict[str, str] = {c: c for c in leaf_curies}
-    active = set(leaf_curies)
-    while active:
-        parent_of = load_first_parent_map({current[c] for c in active})
-        still_active = set()
-        for c in active:
-            parent = parent_of.get(current[c])
-            if parent is not None:
-                chains[c].append(parent)
-                current[c] = parent
-                still_active.add(c)
-        active = still_active
+    per_leaf_levels: dict[str, list[list[str]]] = {}
+    all_nodes: set[str] = set()
+    for leaf in leaf_curies:
+        dist_from_leaf = {leaf: 0}
+        levels = [[leaf]]
+        frontier = [leaf]
+        while frontier:
+            next_frontier = []
+            for node in frontier:
+                for parent in full_parent_map.get(node, ()):
+                    if parent not in dist_from_leaf:
+                        dist_from_leaf[parent] = dist_from_leaf[node] + 1
+                        next_frontier.append(parent)
+            if next_frontier:
+                levels.append(next_frontier)
+            frontier = next_frontier
+        per_leaf_levels[leaf] = levels
+        all_nodes.update(dist_from_leaf)
+
+    label_of = load_labels(all_nodes)
+
+    # Dla każdego węzła: (liczba kroków do najbliższej kotwicy CHV w górę,
+    # -familiarity w tej kotwicy). Mniejszy klucz (leksykograficznie) = lepsza
+    # gałąź -- NAJBLIŻSZA kotwica wygrywa, nie najwyższa znaleziona
+    # gdziekolwiek. To jest kluczowe: prawie każda gałąź EFO/NCIT i tak
+    # ostatecznie trafia w ten sam, bardzo ogólny węzeł blisko korzenia
+    # (np. "Disease, Disorder or Finding", familiarity≈1.0 -- to po prostu
+    # słowo "choroba"), więc branie maksimum "gdziekolwiek" nie rozróżnia
+    # gałęzi w ogóle -- liczy się to, co jest NAJBLIŻEJ.
+    nearest_anchor: dict[str, tuple[int, float]] = {}
+    no_anchor = (10**9, 0.0)
+    for leaf, levels in per_leaf_levels.items():
+        for level in reversed(levels):
+            for node in level:
+                if node in nearest_anchor:
+                    continue
+                label = label_of.get(node)
+                fam = chv_familiarity(label, chv_scores) if label else None
+                if fam is not None:
+                    nearest_anchor[node] = (0, -fam)
+                else:
+                    parents = full_parent_map.get(node, ())
+                    candidates = [nearest_anchor[p] for p in parents if p in nearest_anchor]
+                    best = min(candidates) if candidates else no_anchor
+                    nearest_anchor[node] = (best[0] + 1, best[1]) if candidates else no_anchor
+
+    chains: dict[str, list[str]] = {}
+    for leaf in per_leaf_levels:
+        chain = [leaf]
+        current = leaf
+        while True:
+            parents = full_parent_map.get(current, ())
+            if not parents:
+                break
+            current = min(sorted(parents), key=lambda p: nearest_anchor.get(p, no_anchor))
+            chain.append(current)
+        chains[leaf] = chain
+
     return chains
 
 
@@ -200,13 +326,14 @@ def specificity_along_chain_with_chv(
 
 def climb_to_specificity(leaf_curies: set[str], target_specificity: float) -> dict[str, str]:
     """Dla każdego liścia: CURIE osiągnięty po wspinaczce po jego
-    zdeterminowanym łańcuchu "pierwszego rodzica" aż specificity_score
-    (najpierw z CHV przez dopasowanie tekstowe etykiety, w przeciwnym razie
-    strukturalny) spadnie do/poniżej `target_specificity` (1.0 -> zostaje
-    na liściu, 0.0 -> idzie do korzenia)."""
-    chains = ancestor_chains(leaf_curies)
-    label_of = load_labels({c for chain in chains.values() for c in chain})
+    zdeterminowanym, sterowanym przez CHV łańcuchu (patrz ancestor_chains)
+    aż specificity_score (najpierw z CHV przez dopasowanie tekstowe
+    etykiety, w przeciwnym razie strukturalny) spadnie do/poniżej
+    `target_specificity` (1.0 -> zostaje na liściu, 0.0 -> idzie do
+    korzenia)."""
     chv_scores = load_chv_scores()
+    chains = ancestor_chains(leaf_curies, chv_scores)
+    label_of = load_labels({c for chain in chains.values() for c in chain})
 
     reached: dict[str, str] = {}
     for leaf, chain in chains.items():
@@ -220,8 +347,8 @@ def climb_to_specificity(leaf_curies: set[str], target_specificity: float) -> di
 
 def load_parent_labels(curies: list[str]) -> dict[str, str]:
     """Dla każdego CURIE terminu ontologicznego: etykieta jego bezpośredniego
-    rodzica (is_a, pierwszego znalezionego), używana jako klucz grupowania
-    jeden poziom wyżej."""
+    rodzica (is_a) wg tej samej, sterowanej przez CHV ścieżki co
+    ancestor_chains, używana jako klucz grupowania jeden poziom wyżej."""
     chains = ancestor_chains(set(curies))
     reached = {c: chain[1] for c, chain in chains.items() if len(chain) > 1}
     label_of = load_labels(set(reached.values()))

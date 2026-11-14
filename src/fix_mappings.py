@@ -25,6 +25,20 @@ CORRECTED_SOURCE_TERMS = {
     "BPQ080": "high cholesterol",
     "MCQ160E": "heart attack",
     "MCQ160N": "gout",
+    "RIDAGEYR": "age",
+    "PAQ650": "vigorous recreational activities",
+    "PAQ665": "moderate recreational activities",
+    "RIDRETH3": "race and ethnicity",
+    "INDFMPIR": "poverty income ratio",
+    "BPXSY1": "systolic blood pressure",
+    "BPXDI1": "diastolic blood pressure",
+    "PAQ605": "vigorous physical activity",
+    "SMQ020": "cigarette smoking",
+    "CDQ010": "shortness of breath",
+    "DPQ010": "anhedonia",
+    "DPQ020": "depressed mood",
+    "KIQ029": "kidney stone",
+    "OSQ060": "osteoporosis",
 }
 
 
