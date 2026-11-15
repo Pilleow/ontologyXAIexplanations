@@ -9,4 +9,5 @@ requests
 rdflib
 SPARQLWrapper
 matplotlib
+plotly
 jupyter

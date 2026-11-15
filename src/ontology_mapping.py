@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from chv_familiarity import chv_familiarity, load_chv_scores
+from chv_familiarity import chv_familiarity, is_generic_node, load_chv_scores
 from term_specificity import load_parent_map
 
 META_DIR = Path(__file__).resolve().parents[1] / "external" / "NHANES-metadata"
@@ -250,7 +250,7 @@ def ancestor_chains(
                 if node in nearest_anchor:
                     continue
                 label = label_of.get(node)
-                fam = chv_familiarity(label, chv_scores) if label else None
+                fam = chv_familiarity(label, chv_scores) if label and not is_generic_node(node) else None
                 if fam is not None:
                     nearest_anchor[node] = (0, -fam)
                 else:
@@ -267,8 +267,19 @@ def ancestor_chains(
             parents = full_parent_map.get(current, ())
             if not parents:
                 break
-            current = min(sorted(parents), key=lambda p: nearest_anchor.get(p, no_anchor))
-            chain.append(current)
+            next_node = min(sorted(parents), key=lambda p: nearest_anchor.get(p, no_anchor))
+            # Węzeł z GENERIC_NODES (np. Group, Activity, owl:Thing) albo
+            # bez żadnej etykiety w ogóle (BFO:*/IAO:0000030 -- pokazalibyśmy
+            # użytkownikowi gołe CURIE) nic nie wnosi -- a skoro wspinamy
+            # się w stronę coraz bardziej abstrakcyjnych pojęć, wszystko
+            # POWYŻEJ niego jest co najmniej tak samo bezużyteczne. Ucinamy
+            # łańcuch tutaj: ostatni dodany węzeł staje się efektywnym
+            # korzeniem tej ścieżki -- nieważne, jak niski
+            # target_specificity, wspinaczka nie pójdzie dalej.
+            if is_generic_node(next_node) or label_of.get(next_node) is None:
+                break
+            chain.append(next_node)
+            current = next_node
         chains[leaf] = chain
 
     return chains
@@ -306,7 +317,7 @@ def specificity_along_chain_with_chv(
     chv_values: list[float | None] = []
     for curie in chain:
         label = label_of.get(curie)
-        fam = chv_familiarity(label, chv_scores) if label else None
+        fam = chv_familiarity(label, chv_scores) if label and not is_generic_node(curie) else None
         chv_values.append(1.0 - fam if fam is not None else None)
 
     anchors = [i for i, v in enumerate(chv_values) if v is not None]
