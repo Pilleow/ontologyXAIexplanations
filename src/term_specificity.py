@@ -20,15 +20,7 @@ z danych: to każdy węzeł osiągalny z liścia, który nie ma już własnych r
 ontology_edges.tsv.
 """
 
-from pathlib import Path
-
-ONTOLOGY_EDGES = (
-    Path(__file__).resolve().parent.parent
-    / "external"
-    / "NHANES-metadata"
-    / "ontology-tables"
-    / "ontology_edges.tsv"
-)
+from config.paths import ONTOLOGY_EDGES
 
 
 def load_parent_map() -> dict[str, set[str]]:

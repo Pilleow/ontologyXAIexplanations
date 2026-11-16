@@ -5,32 +5,24 @@ pipeline'u wyjaśnień, a nie dostrojony predyktor kliniczny.
 Używa HistGradientBoostingClassifier ze sklearn (natywnie obsługuje braki
 danych, nie wymaga zewnętrznego runtime'u OpenMP) zamiast XGBoost."""
 
-from pathlib import Path
-
 import joblib
 import pandas as pd
 from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.metrics import roc_auc_score, classification_report
 from sklearn.model_selection import train_test_split
 
+from config.model import HIST_GRADIENT_BOOSTING_PARAMS, RANDOM_STATE, TEST_SIZE
+from config.paths import MODEL_PATH, PROCESSED_DIR
 from features import build_dataset
-
-PROCESSED_DIR = Path(__file__).resolve().parent.parent / "data" / "processed"
-MODEL_PATH = PROCESSED_DIR / "diabetes_model.joblib"
 
 
 def main() -> None:
     X, y = build_dataset()
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, stratify=y, random_state=0
+        X, y, test_size=TEST_SIZE, stratify=y, random_state=RANDOM_STATE
     )
 
-    model = HistGradientBoostingClassifier(
-        max_depth=3,
-        learning_rate=0.05,
-        max_iter=200,
-        random_state=0,
-    )
+    model = HistGradientBoostingClassifier(**HIST_GRADIENT_BOOSTING_PARAMS)
     model.fit(X_train, y_train)
 
     proba = model.predict_proba(X_test)[:, 1]

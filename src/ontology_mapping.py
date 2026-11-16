@@ -11,16 +11,13 @@ CHV zostaje dotychczasowy, czysto strukturalny fallback z głębokości.
 """
 
 from dataclasses import dataclass
-from pathlib import Path
 
 import pandas as pd
 
 from chv_familiarity import chv_familiarity, is_generic_node, load_chv_scores
+from config.ontology_overrides import MANUAL_OVERRIDES
+from config.paths import ONTOLOGY_LABELS, VARIABLE_MAPPINGS
 from term_specificity import load_parent_map
-
-META_DIR = Path(__file__).resolve().parents[1] / "external" / "NHANES-metadata"
-VARIABLE_MAPPINGS = META_DIR / "ontology-mappings" / "nhanes_variables_mappings.tsv"
-ONTOLOGY_LABELS = META_DIR / "ontology-tables" / "ontology_labels.tsv"
 
 
 @dataclass
@@ -32,109 +29,6 @@ class OntologyMapping:
     term_curie: str
     ontology: str
     score: float
-
-
-# Poprawki tam, gdzie oryginalne mapowanie (upstream ccb-hms/NHANES-metadata,
-# text2term na całym tekście pytania ankietowego) albo nie wygenerowało
-# żadnego mapowania, albo zgubiło kluczowe słowo z pytania. Każda poprawka
-# jest zweryfikowana ponownym przebiegiem text2term na skróconej, poprawnej
-# frazie (zamiast całego szablonu pytania) względem naszego własnego,
-# lokalnego zbioru terminów EFO/NCIT/FOODON -- patrz src/fix_mappings.py,
-# nie czysto ręczne asercje CURIE.
-MANUAL_OVERRIDES: dict[str, tuple[str, str]] = {
-    # "chest pain" -> Chest Pain (wynik 0.982). Oryginalnie dopasowane do
-    # ogólnego NCIT:C156140 "Pain or Discomfort" (wynik 0.743), gubiąc słowo
-    # "chest". CDQ001 jest #4 wg globalnego |SHAP| w tym modelu.
-    "CDQ001": ("NCIT:C38665", "Chest Pain"),
-    # "high cholesterol" -> "Hypercholesterolemia" (NCIT:C37967). Rodzic to
-    # "Abnormal Blood Chemistry and Hematology Test Result" -- realny,
-    # zrozumiały koncept, w przeciwieństwie do poprzedniej wersji tej
-    # poprawki ("Cholesterol High, CTCAE"), która wspinała się przez
-    # żargon protokołów badań klinicznych ("Adverse Event", "CTCAE by
-    # Body System"). Oryginalnie brak mapowania w ogóle dla tego cyklu.
-    "BPQ080": ("NCIT:C37967", "Hypercholesterolemia"),
-    # "heart attack" nie ma dobrego kandydata w text2term (najlepszy:
-    # "Heart" 0.673, zupełnie ogólny). Używamy więc CURIE, które upstream
-    # poprawnie przypisał siostrzanej zmiennej o wieku rozpoznania tego
-    # samego schorzenia (MCD180E), zamiast zgadywać od nowa.
-    "MCQ160E": ("NCIT:C27996", "Myocardial Infarction"),
-    # "gout" -> gout/Gout (wynik 0.996, prawie idealny). Oryginalnie brak
-    # mapowania w ogóle dla tej (nie wiekowej) zmiennej.
-    "MCQ160N": ("EFO:0004274", "gout"),
-    # SourceTerm: "Age in years at screening" -- text2term dopasował do
-    # "Screening Study" (NCIT:C71485, wynik 0.739), gubiąc "age" na rzecz
-    # "screening". Istnieje czysty koncept "Age" (NCIT:C25150, rodzic
-    # "Personal Attribute" -- ta sama gałąź co RIAGENDR/"Gender", więc wiek
-    # i płeć będą się sensownie grupować razem wyżej). RIDAGEYR jest #1 wg
-    # globalnego |SHAP| w tym modelu, dwukrotnie przed kolejną cechą.
-    "RIDAGEYR": ("NCIT:C25150", "Age"),
-    # SourceTerm: "Vigorous recreational activities" -- text2term dopasował
-    # do niezwiązanego NCIT:C148226 "Extent Breast Cancer Treatment
-    # Disrupted Recreational Activities" (pytanie o zakłócenie aktywności
-    # przez leczenie raka piersi, nie o poziom aktywności w ogóle).
-    # "Strenuous Exercise" (NCIT:C39773) to rodzeństwo "Moderate Exercise"
-    # (NCIT:C39772, już używane przez PAQ620) w tej samej gałęzi "Exercise".
-    "PAQ650": ("NCIT:C39773", "Strenuous Exercise"),
-    # SourceTerm: "Moderate recreational activities" -- ten sam błąd co
-    # PAQ650. Mapujemy na ten sam koncept co PAQ620 ("Moderate Exercise",
-    # NCIT:C39772) -- ten sam poziom intensywności, inny kontekst pytania
-    # (rekreacja vs praca), ale to ten sam koncept ontologiczny.
-    "PAQ665": ("NCIT:C39772", "Moderate Exercise"),
-    # "race and ethnicity" -> text2term dał "American Ethnicity" (wynik
-    # 0.644), ale to okazało się BŁĘDNE: ten konkretny termin to wąska
-    # podgrupa etniczna ("osoba pochodząca z Ameryk", rodzeństwo "Han
-    # Chinese"/"Sephardic Jew" w tej samej gałęzi), nie ogólna kategoria
-    # rasy/pochodzenia, jaką jest RIDRETH3. Właściwy, generyczny koncept
-    # to "Race" (NCIT:C17049, rodzic "Demographic Group"). Oryginalnie
-    # brak mapowania w ogóle.
-    "RIDRETH3": ("NCIT:C17049", "Race"),
-    # "poverty income ratio" -> Income (wynik 0.593, CHV familiarity
-    # 0.775), rodzic "Socioeconomic Factors" -- ta sama gałąź co
-    # DMDEDUC2/"Education Level". Oryginalnie brak mapowania w ogóle.
-    "INDFMPIR": ("NCIT:C41150", "Income"),
-    # "systolic blood pressure" -> Systolic Blood Pressure (wynik 0.988,
-    # niemal idealny), rodzic "Blood Pressure". Oryginalnie brak mapowania
-    # w ogóle.
-    "BPXSY1": ("NCIT:C25298", "Systolic Blood Pressure"),
-    # "diastolic blood pressure" -> Diastolic Blood Pressure (wynik 0.983).
-    # Oryginalnie brak mapowania w ogóle.
-    "BPXDI1": ("NCIT:C25299", "Diastolic Blood Pressure"),
-    # SourceTerm: "Vigorous work activity" -- ta sama intensywność co
-    # PAQ650 (vigorous recreational), inny kontekst (praca). Mapujemy na
-    # ten sam koncept dla spójności. Oryginalnie brak mapowania w ogóle.
-    "PAQ605": ("NCIT:C39773", "Strenuous Exercise"),
-    # "cigarette smoking" -> Cigarette Smoking (wynik 0.975), rodzic
-    # "Tobacco Smoking" -- realny koncept, w przeciwieństwie do
-    # oryginalnego mapowania na etykietę pytania ("Smoking Question"),
-    # które wspinało się dalej przez "Clinical or Research Assessment
-    # Question" -- tę samą generyczną taksonomię pytań co CDQ010/DPQ*.
-    "SMQ020": ("NCIT:C18270", "Cigarette Smoking"),
-    # "shortness of breath" -> shortness of breath (EFO:0009727, wynik
-    # 0.976) -- realny symptom, zamiast wspinać się przez "Have Symptom
-    # or Condition Question" -> generyczną taksonomię pytań ankietowych.
-    "CDQ010": ("EFO:0009727", "shortness of breath"),
-    # "anhedonia" (kliniczny termin na "mało zainteresowania/przyjemności")
-    # -> Anhedonia (NCIT:C3673, wynik 0.970), rodzic "Mental and
-    # Behavioral Signs and Symptoms" -- ta sama gałąź co DPQ020, więc oba
-    # pytania PHQ-9 będą się sensownie grupować.
-    "DPQ010": ("NCIT:C3673", "Anhedonia"),
-    # "depressed mood" -> Depressed Mood (NCIT:C117199, wynik 0.978), ta
-    # sama gałąź "Mental and Behavioral Signs and Symptoms" co DPQ010.
-    "DPQ020": ("NCIT:C117199", "Depressed Mood"),
-    # SourceTerm: "Pass kidney stone in past 12 months" -- text2term nie
-    # ma dobrego kandydata dla "kidney stone" (najlepszy: "Kidney" 0.749,
-    # "Rat Kidney" 0.672 -- zupełnie nieistotne). Oryginalne mapowanie
-    # ("Renal Stone", NCIT:C26807) wspinało się przez "Material"/
-    # "Specimen"/"Biospecimen" -- traktując kamień jak próbkę
-    # laboratoryjną, nie schorzenie. Używamy tego samego konceptu
-    # choroby co KIQ026 (ten sam temat -- kamienie nerkowe).
-    "KIQ029": ("EFO:0004253", "nephrolithiasis"),
-    # "osteoporosis" -> Osteoporosis (NCIT:C3298, wynik 0.983), rodzic
-    # "Metabolic Bone Disorder" -- realny koncept, zamiast poprzedniej
-    # wersji tej poprawki ("Osteoporosis, CTCAE 3.0"), która wspinała się
-    # przez żargon protokołów badań klinicznych ("Adverse Event").
-    "OSQ060": ("NCIT:C3298", "Osteoporosis"),
-}
 
 
 def load_variable_mappings(tables: list[str]) -> dict[str, OntologyMapping]:

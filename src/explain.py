@@ -14,16 +14,14 @@ informacji to wciąż otwarty problem metodologiczny, który projekt musi
 rozwiązać.
 """
 
-from pathlib import Path
-
 import joblib
 import pandas as pd
 import shap
 
+from config.explain_defaults import DEFAULT_N_EXAMPLES, DEFAULT_TARGET_SPECIFICITY
+from config.paths import PROCESSED_DIR
 from features import FEATURE_TABLES, FEATURE_VARS
 from ontology_mapping import build_feature_groups
-
-PROCESSED_DIR = Path(__file__).resolve().parent.parent / "data" / "processed"
 
 
 def grouped_shap(shap_row: pd.Series, groups: dict[str, str]) -> pd.Series:
@@ -48,7 +46,9 @@ def print_explanation(
         print(f"  {group:35s} {val:+.3f}")
 
 
-def main(n_examples: int = 3, target_specificity: float = 1.0) -> None:
+def main(
+    n_examples: int = DEFAULT_N_EXAMPLES, target_specificity: float = DEFAULT_TARGET_SPECIFICITY
+) -> None:
     model = joblib.load(PROCESSED_DIR / "diabetes_model.joblib")
     X_test = pd.read_parquet(PROCESSED_DIR / "X_test.parquet")
     y_test = pd.read_parquet(PROCESSED_DIR / "y_test.parquet")["label"]
@@ -93,7 +93,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--target-specificity",
         type=float,
-        default=1.0,
+        default=DEFAULT_TARGET_SPECIFICITY,
         help=(
             "Próg na skali specificity_score (1.0 = liść/bez grupowania "
             "[domyślnie], 0.0 = korzeń), do którego wspinamy się po ontologii "
@@ -101,7 +101,10 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
-        "--n-examples", type=int, default=3, help="Liczba przykładowych respondentów."
+        "--n-examples",
+        type=int,
+        default=DEFAULT_N_EXAMPLES,
+        help="Liczba przykładowych respondentów.",
     )
     args = parser.parse_args()
     main(n_examples=args.n_examples, target_specificity=args.target_specificity)

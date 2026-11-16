@@ -9,13 +9,10 @@ terminów EFO/NCIT/FOODON) -- bez potrzeby pobierania pełnych plików OWL czy
 klucza API BioPortal.
 """
 
-from pathlib import Path
-
 from text2term.term import OntologyTerm
 from text2term.tfidf_mapper import TFIDFMapper
 
-META_DIR = Path(__file__).resolve().parent.parent / "external" / "NHANES-metadata"
-ONTOLOGY_LABELS = META_DIR / "ontology-tables" / "ontology_labels.tsv"
+from config.paths import ONTOLOGY_LABELS
 
 # Frazy poprawione względem oryginalnego, pełnego pytania ankietowego --
 # sam symptom/koncept, nie szablon pytania (patrz plan: "naprawa mapowania

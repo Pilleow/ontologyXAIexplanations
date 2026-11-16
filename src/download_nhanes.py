@@ -1,13 +1,11 @@
 """Pobiera tabele NHANES z cyklu 2017-2018 używane w tym projekcie z serwera
 danych continuous NHANES (CDC)."""
 
-from pathlib import Path
-
 import requests
 
-from load_nhanes import TABLES, RAW_DIR
+from config.nhanes_tables import CYCLE_BEGIN_YEAR, TABLES
+from config.paths import RAW_DIR
 
-CYCLE_BEGIN_YEAR = 2017
 BASE_URL = f"https://wwwn.cdc.gov/Nchs/Data/Nhanes/Public/{CYCLE_BEGIN_YEAR}/DataFiles"
 
 

@@ -1,35 +1,11 @@
 """Wczytuje tabele NHANES z cyklu 2017-2018 używane w tym projekcie i scala je
 w jedną ramkę danych per respondent, indeksowaną po SEQN."""
 
-from pathlib import Path
-
 import pandas as pd
 import pyreadstat
 
-RAW_DIR = Path(__file__).resolve().parents[1] / "data" / "raw" / "2017-2018"
-PROCESSED_DIR = Path(__file__).resolve().parents[1] / "data" / "processed"
-
-TABLES = [
-    "DEMO_J",
-    "BMX_J",
-    "BPX_J",
-    "GHB_J",
-    "GLU_J",
-    "DIQ_J",
-    "HDL_J",
-    "TCHOL_J",
-    "TRIGLY_J",
-    "INS_J",
-    "PAQ_J",
-    "SMQ_J",
-    "ALQ_J",
-    "MCQ_J",
-    "KIQ_U_J",
-    "CDQ_J",
-    "DPQ_J",
-    "BPQ_J",
-    "OSQ_J",
-]
+from config.nhanes_tables import TABLES
+from config.paths import PROCESSED_DIR, RAW_DIR
 
 
 def load_table(table: str) -> pd.DataFrame:
